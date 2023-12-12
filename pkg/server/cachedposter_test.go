@@ -12,7 +12,7 @@ import (
 
 type stubBodyPoster struct {
 	timesCalled int
-	respBody string
+	respBody    string
 }
 
 func (m *stubBodyPoster) Post(url, contentType string, body io.Reader) (resp *http.Response, err error) {
@@ -48,10 +48,7 @@ func (m stubFailReader) Read(p []byte) (n int, err error) {
 }
 
 func TestPost_ForwardsPosterError(t *testing.T) {
-	s := server.CachedPoster{
-		HTTPPoster: new(stubErrServerClosedPoster),
-	}
-	s.Initialize()
+	s := server.NewCachedPoster(new(stubErrServerClosedPoster))
 
 	_, err := s.Post("http://example.com", "some json")
 
@@ -59,10 +56,7 @@ func TestPost_ForwardsPosterError(t *testing.T) {
 }
 
 func TestPost_ForwardsBodyReadError(t *testing.T) {
-	s := server.CachedPoster{
-		HTTPPoster: new(stubErrShortBufferOnBodyReadPoster),
-	}
-	s.Initialize()
+	s := server.NewCachedPoster(new(stubErrShortBufferOnBodyReadPoster))
 
 	_, err := s.Post("http://example.com", "some json")
 
@@ -73,10 +67,7 @@ func TestPost_ReturnsResponseBodyAndNil_OnCacheMiss(t *testing.T) {
 	poster := &stubBodyPoster{
 		respBody: "stub response",
 	}
-	s := server.CachedPoster{
-		HTTPPoster: poster,
-	}
-	s.Initialize()
+	s := server.NewCachedPoster(poster)
 
 	resp, err := s.Post("http://example.com", "some json")
 
@@ -88,10 +79,7 @@ func TestPost_ReturnsResponseBodyAndNil_OnCacheHit(t *testing.T) {
 	poster := &stubBodyPoster{
 		respBody: "stub response",
 	}
-	s := server.CachedPoster{
-		HTTPPoster: poster,
-	}
-	s.Initialize()
+	s := server.NewCachedPoster(poster)
 
 	s.Post("http://example.com", "some json")
 	resp, err := s.Post("http://example.com", "some json")
@@ -102,10 +90,7 @@ func TestPost_ReturnsResponseBodyAndNil_OnCacheHit(t *testing.T) {
 
 func TestPost_InvokesPosterOnlyOnceForSameJsonAndURL(t *testing.T) {
 	poster := new(stubBodyPoster)
-	s := server.CachedPoster{
-		HTTPPoster: poster,
-	}
-	s.Initialize()
+	s := server.NewCachedPoster(poster)
 
 	s.Post("http://example.com", "some json")
 	s.Post("http://example.com", "some json")
@@ -116,10 +101,7 @@ func TestPost_InvokesPosterOnlyOnceForSameJsonAndURL(t *testing.T) {
 
 func TestPost_InvokesPosterWhenRequestBodyDiffers(t *testing.T) {
 	poster := new(stubBodyPoster)
-	s := server.CachedPoster{
-		HTTPPoster: poster,
-	}
-	s.Initialize()
+	s := server.NewCachedPoster(poster)
 
 	s.Post("http://example.com", "some json")
 	s.Post("http://example.com", "some other json")
@@ -129,10 +111,7 @@ func TestPost_InvokesPosterWhenRequestBodyDiffers(t *testing.T) {
 
 func TestPost_InvokesPosterWhenURLDiffers(t *testing.T) {
 	poster := new(stubBodyPoster)
-	s := server.CachedPoster{
-		HTTPPoster: poster,
-	}
-	s.Initialize()
+	s := server.NewCachedPoster(poster)
 
 	s.Post("http://one.com", "some json")
 	s.Post("http://two.com", "some json")

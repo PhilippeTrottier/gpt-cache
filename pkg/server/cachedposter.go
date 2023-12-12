@@ -20,13 +20,16 @@ type cacheKey struct {
 	jsonBody string
 }
 
-func (s *CachedPoster) Initialize() {
+func NewCachedPoster(poster Poster) *CachedPoster {
+	var s CachedPoster
 	s.cache = make(map[cacheKey][]byte)
+	s.HTTPPoster = poster
+	return &s
 }
 
 // Post should not be called concurrently.
 func (s *CachedPoster) Post(url string, jsonBody string) ([]byte, error) {
-	ck := cacheKey{ url, jsonBody }
+	ck := cacheKey{url, jsonBody}
 	if answer, ok := s.cache[ck]; ok {
 		return answer, nil
 	}

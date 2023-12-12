@@ -18,3 +18,7 @@ test:
 generate-swagger:
 	mkdir -p pkg/api
 	oapi-codegen -package api -generate types,client,chi-server,spec api/swagger.yaml > pkg/api/gptcacheapi.gen.go
+
+.PHONY: fmt
+fmt:
+	go fmt ./...
