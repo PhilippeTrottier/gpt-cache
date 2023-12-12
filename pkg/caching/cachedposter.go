@@ -12,7 +12,7 @@ type Poster interface {
 
 type CachedPoster struct {
 	HTTPPoster Poster
-	cache      map[cacheKey][]byte
+	cache      map[cacheKey][]byte // todo take in a storage layer dep instead. support persistence with sqlite
 }
 
 type cacheKey struct {
