@@ -1,6 +1,8 @@
 package main
 
 import (
+	"flag"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -22,18 +24,22 @@ func (i *impl) PostForward(w http.ResponseWriter, r *http.Request) {
 
 	rawJson, err := i.cp.Post(i.url, string(jsonBody))
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError) // todo forward error code
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusOK) // todo return 201 if not in cache
 	w.Write(rawJson)
 }
 
 func main() {
+	url := flag.String("url", "https://postman-echo.com/post", "url to forward to")
+	port := flag.Uint("port", 8080, "port to listen on")
+	flag.Parse()
+
 	cp := caching.NewCachedPoster(new(http.Client))
 
-	h := api.Handler(&impl{"https://postman-echo.com/post", cp})
+	h := api.Handler(&impl{*url, cp})
 	http.Handle("/", h)
-	http.ListenAndServe(":8080", nil)
+	http.ListenAndServe(fmt.Sprintf(":%d", *port), nil)
 }

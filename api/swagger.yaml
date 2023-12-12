@@ -13,7 +13,6 @@ paths:
         - in: body
           name: body
           description: The request body.
-          required: true
           schema:
             type: string
       responses:

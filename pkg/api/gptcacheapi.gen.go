@@ -6,10 +6,8 @@ package api
 import (
 	"bytes"
 	"compress/gzip"
-	"context"
 	"encoding/base64"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"path"
@@ -18,215 +16,6 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/go-chi/chi/v5"
 )
-
-// RequestEditorFn  is the function signature for the RequestEditor callback function
-type RequestEditorFn func(ctx context.Context, req *http.Request) error
-
-// Doer performs HTTP requests.
-//
-// The standard http.Client implements this interface.
-type HttpRequestDoer interface {
-	Do(req *http.Request) (*http.Response, error)
-}
-
-// Client which conforms to the OpenAPI3 specification for this service.
-type Client struct {
-	// The endpoint of the server conforming to this interface, with scheme,
-	// https://api.deepmap.com for example. This can contain a path relative
-	// to the server, such as https://api.deepmap.com/dev-test, and all the
-	// paths in the swagger spec will be appended to the server.
-	Server string
-
-	// Doer for performing requests, typically a *http.Client with any
-	// customized settings, such as certificate chains.
-	Client HttpRequestDoer
-
-	// A list of callbacks for modifying requests which are generated before sending over
-	// the network.
-	RequestEditors []RequestEditorFn
-}
-
-// ClientOption allows setting custom parameters during construction
-type ClientOption func(*Client) error
-
-// Creates a new Client, with reasonable defaults
-func NewClient(server string, opts ...ClientOption) (*Client, error) {
-	// create a client with sane default values
-	client := Client{
-		Server: server,
-	}
-	// mutate client and add all optional params
-	for _, o := range opts {
-		if err := o(&client); err != nil {
-			return nil, err
-		}
-	}
-	// ensure the server URL always has a trailing slash
-	if !strings.HasSuffix(client.Server, "/") {
-		client.Server += "/"
-	}
-	// create httpClient, if not already present
-	if client.Client == nil {
-		client.Client = &http.Client{}
-	}
-	return &client, nil
-}
-
-// WithHTTPClient allows overriding the default Doer, which is
-// automatically created using http.Client. This is useful for tests.
-func WithHTTPClient(doer HttpRequestDoer) ClientOption {
-	return func(c *Client) error {
-		c.Client = doer
-		return nil
-	}
-}
-
-// WithRequestEditorFn allows setting up a callback function, which will be
-// called right before sending the request. This can be used to mutate the request.
-func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
-	return func(c *Client) error {
-		c.RequestEditors = append(c.RequestEditors, fn)
-		return nil
-	}
-}
-
-// The interface specification for the client above.
-type ClientInterface interface {
-	// PostForward request
-	PostForward(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-}
-
-func (c *Client) PostForward(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostForwardRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-// NewPostForwardRequest generates requests for PostForward
-func NewPostForwardRequest(server string) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/forward")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
-	for _, r := range c.RequestEditors {
-		if err := r(ctx, req); err != nil {
-			return err
-		}
-	}
-	for _, r := range additionalEditors {
-		if err := r(ctx, req); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// ClientWithResponses builds on ClientInterface to offer response payloads
-type ClientWithResponses struct {
-	ClientInterface
-}
-
-// NewClientWithResponses creates a new ClientWithResponses, which wraps
-// Client with return type handling
-func NewClientWithResponses(server string, opts ...ClientOption) (*ClientWithResponses, error) {
-	client, err := NewClient(server, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return &ClientWithResponses{client}, nil
-}
-
-// WithBaseURL overrides the baseURL.
-func WithBaseURL(baseURL string) ClientOption {
-	return func(c *Client) error {
-		newBaseURL, err := url.Parse(baseURL)
-		if err != nil {
-			return err
-		}
-		c.Server = newBaseURL.String()
-		return nil
-	}
-}
-
-// ClientWithResponsesInterface is the interface specification for the client with responses above.
-type ClientWithResponsesInterface interface {
-	// PostForwardWithResponse request
-	PostForwardWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostForwardResponse, error)
-}
-
-type PostForwardResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-}
-
-// Status returns HTTPResponse.Status
-func (r PostForwardResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r PostForwardResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-// PostForwardWithResponse request returning *PostForwardResponse
-func (c *ClientWithResponses) PostForwardWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*PostForwardResponse, error) {
-	rsp, err := c.PostForward(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePostForwardResponse(rsp)
-}
-
-// ParsePostForwardResponse parses an HTTP response from a PostForwardWithResponse call
-func ParsePostForwardResponse(rsp *http.Response) (*PostForwardResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &PostForwardResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	return response, nil
-}
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -392,13 +181,13 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/7SSwYrbQAyGX0Xo1IJxnNDSZW5loSW3HPZWcpjaynrA1kwleVMT/O5lxmbTwtLbnjzj",
-	"kX7p068bBr5EdDe0YAOhw++nJ3j0bU/w9XTECl9INERGh/u6qRtcKoyJ2KeADrHC5K3XLLC7RLl66fI5",
-	"RbX8bSPrNJKi+4FGv22XBh8Yz0VDvIXIxw4dnqLaty09S4ofyUhy3g070lZCsrWLp55A6NdEavAzdnON",
-	"FYb8kC9YIfuR7rccGYQ6dCYTVahtT6MvvHPKcWoS+BmX5ZyDNUVWKjiHptkIjLjA/AXgbv9RWqo3W161",
-	"4UNbhtsH+1jnYR6a/XvWGYPqWujTCvRvyuNrEHjuQONI1gd+hiuxwVViPvbEYDLn3xZhsxnsbkTR//yW",
-	"/pGNhP0ASvJCAiQSpcbcu07j6GVGh5vzWiTz6rwaPPFAubU71iUKBIOg4Ach380QuOQV3Hody1ps3Z5J",
-	"BnTYmyW32+0PX/IS13v30Dw0uJyXPwEAAP//29NYqAEDAAA=",
+	"H4sIAAAAAAAC/7SSwYrbQAyGX0Xo1IJxnNDSZW5loSW3HPZWcpjaynrA1kwleVMT/O5lxmbTwtLbnjwj",
+	"j359+qUbBr5EdDe0YAOhw++nJ3j0bU/w9XTECl9INERGh/u6qRtcKoyJ2KeADrHC5K3XLLC7RLl66fI5",
+	"RbX8bSPrNJKi+4FGv22XBh8Yz0VDvIXIxw4dnqLaty09S4ofyUhy3g070lZCspXiqScQ+jWRGvyM3Vxj",
+	"hSH/yBeskP1I95u2PY2+9DenHFeTwM+4LOcKhTRFVir4h6bZiI24wP8F7G7/UVqqNxFXbfjQFjP7YB/r",
+	"bN6h2b9nnTGoroU+rQ39m/L4+gg8d6BxJOsDP8OV2OAqMR97YjCZc9gibGMFuxtf9D+/pX9kI2E/gJK8",
+	"kACJRKkxs+s0jl5mdLhNWotkXpXXgU48UEa7t3WJAsEgKPhByHczBC55pd16tWUttm7LJAM67M2S2+32",
+	"hy95aeu9e2geGlzOy58AAAD//3JXFRDxAgAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
