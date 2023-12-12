@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 
 	"github.com/gpt-cache/pkg/api"
 	"github.com/gpt-cache/pkg/caching"
@@ -13,6 +14,7 @@ import (
 type impl struct {
 	url string
 	cp  *caching.CachedPoster
+	l   *sync.Mutex // todo handle concc better
 }
 
 func (i *impl) PostForward(w http.ResponseWriter, r *http.Request) {
@@ -22,7 +24,9 @@ func (i *impl) PostForward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	i.l.Lock()
 	rawJson, err := i.cp.Post(i.url, string(jsonBody))
+	i.l.Unlock()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError) // todo forward error code
 		return
@@ -39,7 +43,7 @@ func main() {
 
 	cp := caching.NewCachedPoster(new(http.Client))
 
-	h := api.Handler(&impl{*url, cp})
+	h := api.Handler(&impl{*url, cp, new(sync.Mutex)})
 	http.Handle("/", h)
 	http.ListenAndServe(fmt.Sprintf(":%d", *port), nil)
 }
