@@ -1,0 +1,40 @@
+info:
+  title: GPT Cache API
+  version: 1.0.0
+servers:
+  - url: http://127.0.0.1:8080
+paths:
+  /forward:
+    post:
+      summary: Forwards the post request unless a response for it is already in the cache.
+      consumes:
+        - text/json
+      parameters:
+        - in: body
+          name: body
+          description: The request body.
+          required: true
+          schema:
+            type: object
+            required:
+              - jsonBody
+            properties:
+              jsonBody:
+                type: string
+      responses:
+        '200':
+          description: The response (cache hit).
+          content:
+            text/plain:
+              schema:
+                type: string
+        '201':
+          description: The response (cache miss).
+          content:
+            text/plain:
+              schema:
+                type: string
+        '400':
+          description: Cache miss and something went wrong when trying to forward the request.
+        '500':
+          description: Internal server error.
