@@ -13,3 +13,8 @@ run:
 .PHONY: test
 test:
 	go test -v -race -count=1 ./...
+
+.PHONY: generate-swagger
+generate-swagger:
+	mkdir -p pkg/api
+	oapi-codegen -package api api/swagger.yaml > pkg/api/gptcacheapi.gen.go
