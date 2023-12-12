@@ -5,12 +5,12 @@ import (
 	"net/http"
 
 	"github.com/gpt-cache/pkg/api"
-	"github.com/gpt-cache/pkg/server"
+	"github.com/gpt-cache/pkg/caching"
 )
 
 type impl struct {
 	url string
-	cp  *server.CachedPoster
+	cp  *caching.CachedPoster
 }
 
 func (i *impl) PostForward(w http.ResponseWriter, r *http.Request) {
@@ -31,7 +31,7 @@ func (i *impl) PostForward(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	cp := server.NewCachedPoster(new(http.Client))
+	cp := caching.NewCachedPoster(new(http.Client))
 
 	h := api.Handler(&impl{"https://postman-echo.com/post", cp})
 	http.Handle("/", h)

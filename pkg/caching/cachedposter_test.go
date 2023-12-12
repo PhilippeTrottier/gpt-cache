@@ -1,4 +1,4 @@
-package server_test
+package caching_test
 
 import (
 	"io"
@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gpt-cache/pkg/server"
+	"github.com/gpt-cache/pkg/caching"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -48,7 +48,7 @@ func (m stubFailReader) Read(p []byte) (n int, err error) {
 }
 
 func TestPost_ForwardsPosterError(t *testing.T) {
-	s := server.NewCachedPoster(new(stubErrServerClosedPoster))
+	s := caching.NewCachedPoster(new(stubErrServerClosedPoster))
 
 	_, err := s.Post("http://example.com", "some json")
 
@@ -56,7 +56,7 @@ func TestPost_ForwardsPosterError(t *testing.T) {
 }
 
 func TestPost_ForwardsBodyReadError(t *testing.T) {
-	s := server.NewCachedPoster(new(stubErrShortBufferOnBodyReadPoster))
+	s := caching.NewCachedPoster(new(stubErrShortBufferOnBodyReadPoster))
 
 	_, err := s.Post("http://example.com", "some json")
 
@@ -67,7 +67,7 @@ func TestPost_ReturnsResponseBodyAndNil_OnCacheMiss(t *testing.T) {
 	poster := &stubBodyPoster{
 		respBody: "stub response",
 	}
-	s := server.NewCachedPoster(poster)
+	s := caching.NewCachedPoster(poster)
 
 	resp, err := s.Post("http://example.com", "some json")
 
@@ -79,7 +79,7 @@ func TestPost_ReturnsResponseBodyAndNil_OnCacheHit(t *testing.T) {
 	poster := &stubBodyPoster{
 		respBody: "stub response",
 	}
-	s := server.NewCachedPoster(poster)
+	s := caching.NewCachedPoster(poster)
 
 	s.Post("http://example.com", "some json")
 	resp, err := s.Post("http://example.com", "some json")
@@ -90,7 +90,7 @@ func TestPost_ReturnsResponseBodyAndNil_OnCacheHit(t *testing.T) {
 
 func TestPost_InvokesPosterOnlyOnceForSameJsonAndURL(t *testing.T) {
 	poster := new(stubBodyPoster)
-	s := server.NewCachedPoster(poster)
+	s := caching.NewCachedPoster(poster)
 
 	s.Post("http://example.com", "some json")
 	s.Post("http://example.com", "some json")
@@ -101,7 +101,7 @@ func TestPost_InvokesPosterOnlyOnceForSameJsonAndURL(t *testing.T) {
 
 func TestPost_InvokesPosterWhenRequestBodyDiffers(t *testing.T) {
 	poster := new(stubBodyPoster)
-	s := server.NewCachedPoster(poster)
+	s := caching.NewCachedPoster(poster)
 
 	s.Post("http://example.com", "some json")
 	s.Post("http://example.com", "some other json")
@@ -111,7 +111,7 @@ func TestPost_InvokesPosterWhenRequestBodyDiffers(t *testing.T) {
 
 func TestPost_InvokesPosterWhenURLDiffers(t *testing.T) {
 	poster := new(stubBodyPoster)
-	s := server.NewCachedPoster(poster)
+	s := caching.NewCachedPoster(poster)
 
 	s.Post("http://one.com", "some json")
 	s.Post("http://two.com", "some json")
